@@ -55,6 +55,7 @@ function getMessageCreateHandler(
 	webhook: Webhook,
 	guild: Guild,
 ): (...args: ClientEvents['messageCreate']) => Awaitable<void> {
+	let layerCounter = 0
 	return async (message) => {
 		if (
 			message.channelId !== config.channel ||
@@ -63,34 +64,46 @@ function getMessageCreateHandler(
 		) {
 			return
 		}
-		const parsedMessage = parseUserMessage(message.content, config.radix)
-		const member = await guild.members.fetch(message.author.id)
 
-		// resend user message as a webhook message to prevent users from editing the message
-		await webhook.send({
-			content: `\`${parsedMessage.representation}\`${
-				parsedMessage.note
-					? // pipes in the note are removed by parseUserMessage so it is safe to pass it here directly.
-					  ` ||${parsedMessage.note}||`
-					: ''
-			}`,
-			username: member.displayName,
-			avatarURL: member.displayAvatarURL(),
-		})
-		await message.delete()
+		layerCounter++
 
-		// check if the user submitted value is correct
-		const previousValue = storePtr[0].previous_value
-		if (
-			previousValue === undefined ||
-			parsedMessage.value === previousValue + 1
-		) {
-			await updateStore(storePtr, { previous_value: parsedMessage.value })
-		} else {
+		try {
+			if (layerCounter > 1) {
+				// race condition
+				await message.delete()
+				return
+			}
+
+			const parsedMessage = parseUserMessage(message.content, config.radix)
+			const member = await guild.members.fetch(message.author.id)
+
+			// resend user message as a webhook message to prevent users from editing the message
 			await webhook.send({
-				embeds: [
-					new EmbedBuilder().setTitle('defective unit detected').setDescription(
-						`<@${message.author.id}> just malfunctioned!
+				content: `\`${parsedMessage.representation}\`${
+					parsedMessage.note
+						? // pipes in the note are removed by parseUserMessage so it is safe to pass it here directly.
+						  ` ||${parsedMessage.note}||`
+						: ''
+				}`,
+				username: member.displayName,
+				avatarURL: member.displayAvatarURL(),
+			})
+			await message.delete()
+
+			// check if the user submitted value is correct
+			const previousValue = storePtr[0].previous_value
+			if (
+				previousValue === undefined ||
+				parsedMessage.value === previousValue + 1
+			) {
+				await updateStore(storePtr, { previous_value: parsedMessage.value })
+			} else {
+				await webhook.send({
+					embeds: [
+						new EmbedBuilder()
+							.setTitle('defective unit detected')
+							.setDescription(
+								`<@${message.author.id}> just malfunctioned!
 						\`\`\`diff
 						+ ${(previousValue + 1).toString(config.radix)}
 						- ${parsedMessage.value.toString(config.radix)}
@@ -99,10 +112,15 @@ function getMessageCreateHandler(
 							config.radix,
 						)} (${previousValue}). let's try again starting from 0.
 						`.replace(/^\s+/gm, ''),
-					),
-				],
-			})
-			await updateStore(storePtr, { previous_value: -1 })
+							),
+					],
+				})
+				await updateStore(storePtr, { previous_value: -1 })
+			}
+		} catch (e) {
+			console.error('[messageCreateHandler]', e)
+		} finally {
+			layerCounter--
 		}
 	}
 }
