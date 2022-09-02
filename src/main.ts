@@ -114,7 +114,7 @@ interface UserMessage {
 }
 
 function parseUserMessage(message: string, radix: Radix): UserMessage {
-	type State = 'start' | 'representation' | 'note'
+	type State = 'prefix' | 'representation' | 'note'
 	const DigitSet = new Set(
 		[
 			// '0' to '9'
@@ -133,12 +133,24 @@ function parseUserMessage(message: string, radix: Radix): UserMessage {
 		note: '',
 		value: 0,
 	}
-	let state: State = 'start'
+	const prefix: string[] = []
+	let state: State = 'prefix'
+
+	// ┌────────┐  (digit)   ┌────────────────┐  (non-digit, non-whitespace)   ┌────────────────┐
+	// │ prefix ├───────────►│ representation ├───────────────────────────────►│      note      │
+	// └────┬───┘            └────┬──────────┬┘                                └──┬────────────┬┘
+	//    ▲ │ (non-digit)       ▲ │ (digit)  │ (whitespace)                     ▲ │ (allowed)  │ (prefix / denied)
+	//    └─┘                   └─┘          ▼                                  └─┘            ▼
+	//                                 ┌───────────┐                                     ┌───────────┐
+	//                                 │ /dev/null │                                     │ /dev/null │
+	//                                 └───────────┘                                     └───────────┘
 
 	for (const char of message) {
-		if (state === 'start') {
+		if (state === 'prefix') {
 			if (DigitSet.has(char.toLowerCase())) {
 				state = 'representation'
+			} else {
+				prefix.push(char)
 			}
 		}
 		if (state === 'representation') {
@@ -149,6 +161,12 @@ function parseUserMessage(message: string, radix: Radix): UserMessage {
 			}
 		}
 		if (state === 'note') {
+			const indexInPrefix = prefix.indexOf(char)
+			if (indexInPrefix > -1) {
+				prefix.splice(indexInPrefix, 1)
+				continue
+			}
+
 			if (!DeniedPattern.test(char)) {
 				ans.note += char
 			}
