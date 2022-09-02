@@ -70,14 +70,18 @@ function getMessageCreateHandler(
 		try {
 			if (layerCounter > 1) {
 				// race condition
-				await message.delete()
 				return
 			}
 
 			const parsedMessage = parseUserMessage(message.content, config.radix)
+
+			if (parsedMessage.representation === '') {
+				return
+			}
+
 			const member = await guild.members.fetch(message.author.id)
 
-			// resend user message as a webhook message to prevent users from editing the message
+			// resend user message as a webhook message for formatting
 			await webhook.send({
 				content: `\`${parsedMessage.representation}\`${
 					parsedMessage.note
@@ -88,7 +92,6 @@ function getMessageCreateHandler(
 				username: member.displayName,
 				avatarURL: member.displayAvatarURL(),
 			})
-			await message.delete()
 
 			// check if the user submitted value is correct
 			const previousValue = storePtr[0].previous_value
@@ -108,9 +111,9 @@ function getMessageCreateHandler(
 						+ ${(previousValue + 1).toString(config.radix)}
 						- ${parsedMessage.value.toString(config.radix)}
 						\`\`\`
-						we successfully counted to ${previousValue.toString(
+						we successfully counted to \`${previousValue.toString(
 							config.radix,
-						)} (${previousValue}). let's try again starting from 0.
+						)}\` (decimal \`${previousValue}\`). let's try again starting from \`0\`.
 						`.replace(/^\s+/gm, ''),
 							),
 					],
@@ -120,6 +123,11 @@ function getMessageCreateHandler(
 		} catch (e) {
 			console.error('[messageCreateHandler]', e)
 		} finally {
+			try {
+				await message.delete()
+			} catch (e) {
+				console.error('[messageCreateHandler] message.delete', e)
+			}
 			layerCounter--
 		}
 	}
