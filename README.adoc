@@ -1,0 +1,64 @@
+= QUDAH
+
+Quality, Useful Discord Automation for Humanity - quality assurance bot for distributed, energy-efficient special
+numerical counting operations on Discord with an emphasis on continuous delivery.
+
+== contributing
+
+any contribution is welcome.
+why you would want to contribute, however, is beyond the author.
+
+.set up local environment
+* install Git: https://git-scm.com/downloads.
+* install Node.js LTS: https://nodejs.org.
+* fork the repository onto your personal GitHub account.
+* `$ git clone <URL of your fork>`.
+* `$ cd QUDAH && npm install`.
+
+.code structure
+* `src`: all source code written in TypeScript.
+** `main.ts`: the main entry point for the bot.
+* `lib`: JavaScript compiled down from the source code. this direcotry is not included under the version control.
+** `config.json`: <<configuration>> file.
+** `store.json`: runtime <<storage>> file.
+
+.compile
+* `$ npm run build`.
+
+.test run
+* obtain a Discord bot token on the https://discord.com/developers[Discord Developer Portal], and invite the bot to your test server.
+* create `./lib/config.json` with the appropriate <<configuration>>.
+* `$ npm start`
+
+.formatting & linting
+* `$ npm run precommit`
+
+== configuration
+
+the config file for QUDAH is located at `./lib/config.json`.
+the content should be in https://www.json.org[the JSON format].
+
+* root object
+** `token`: (`string`) the Discord bot token.
+** `radix`: (`2 | 10 | 16`) the radix to use for the special numerical counting operations.
+** `channel`: (`Snowflake`) the https://discord.com/developers/docs/reference#snowflakes[Snowflake ID] of the channel where the special numerical counting operations are hosted.
+** `guild`: (`Snowflake`) the Snowflake ID of the guild.
+
+== storage
+
+the storage file for QUDAH is located at `./lib/store.json`.
+this file should not be modified manually under regular circumstances.
+
+== <3 built with
+
+* https://discord.js.org/[discord.js]
+* https://eslint.org/[ESLint]
+* https://prettier.io/[Prettier]
+* https://typescriptlang.org/[TypeScript]
+* https://typescript-eslint.io[TypeScript ESLint]
+
+== unlicense
+
+this is free and unencumbered software released into the public domain.
+
+see https://github.com/JaneIRL/QUDAH/blob/main/UNLICENSE[UNLICENSE] for more information.
