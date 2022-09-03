@@ -9,6 +9,7 @@ import {
 } from 'discord.js'
 import { loadConfig, QudahConfig, Radix } from './config.js'
 import { loadStore, Store, updateStore } from './store.js'
+import { stringifyNumber } from './util.js'
 
 const client = new Client({
 	intents: ['Guilds', 'GuildMessages', 'GuildWebhooks', 'MessageContent'],
@@ -83,7 +84,7 @@ function getMessageCreateHandler(
 
 			// resend user message as a webhook message for formatting
 			await webhook.send({
-				content: `\`${parsedMessage.representation}\`${
+				content: `\`${stringifyNumber(parsedMessage.value, config.radix)}\`${
 					parsedMessage.note
 						? // pipes in the note are removed by parseUserMessage so it is safe to pass it here directly.
 						  ` ||${parsedMessage.note}||`
@@ -108,10 +109,11 @@ function getMessageCreateHandler(
 							.setDescription(
 								`<@${message.author.id}> just malfunctioned!
 						\`\`\`diff
-						+ ${(previousValue + 1).toString(config.radix)}
-						- ${parsedMessage.value.toString(config.radix)}
+						+ ${stringifyNumber(previousValue + 1, config.radix)}
+						- ${stringifyNumber(parsedMessage.value, config.radix)}
 						\`\`\`
-						we successfully counted to \`${previousValue.toString(
+						we successfully counted to \`${stringifyNumber(
+							previousValue,
 							config.radix,
 						)}\` (decimal \`${previousValue}\`). let's try again starting from \`0\`.
 						`.replace(/^\s+/gm, ''),
@@ -162,14 +164,18 @@ function parseUserMessage(message: string, radix: Radix): UserMessage {
 	const prefix: string[] = []
 	let state: State = 'prefix'
 
-	// ┌────────┐  (digit)   ┌────────────────┐  (non-digit, non-whitespace)   ┌────────────────┐
-	// │ prefix ├───────────►│ representation ├───────────────────────────────►│      note      │
-	// └────┬───┘            └────┬──────────┬┘                                └──┬────────────┬┘
-	//    ▲ │ (non-digit)       ▲ │ (digit)  │ (whitespace)                     ▲ │ (allowed)  │ (prefix / denied)
-	//    └─┘                   └─┘          ▼                                  └─┘            ▼
-	//                                 ┌───────────┐                                     ┌───────────┐
-	//                                 │ /dev/null │                                     │ /dev/null │
-	//                                 └───────────┘                                     └───────────┘
+	// ┌────────┐  (digit)   ┌──────────────────┐   (else)    ┌────────────────┐
+	// │ prefix ├───────────►│  representation  ├────────────►│      note      │
+	// └────┬───┘            └────┬──────────┬──┘             └──┬────────────┬┘
+	//    △ │ (else)            △ │ (digit)  │ (whitespace)    △ │ (else)     │ (prefix / denied)
+	//    └─┘                   └─┘          ▽                 └─┘            ▽
+	//                                 ┌───────────┐                    ┌───────────┐
+	//                                 │ /dev/null │                    │ /dev/null │
+	//                                 └───────────┘                    └───────────┘
+	//
+	// legend:
+	// * ────► transition state to. no character is consumed.
+	// * ────▷ append character to. character is consumed.
 
 	for (const char of message) {
 		if (state === 'prefix') {

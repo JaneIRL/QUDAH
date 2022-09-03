@@ -27,3 +27,20 @@ export async function saveJsonFile(path: string, data: unknown): Promise<void> {
 	console.info(`[saveJsonFile] saving '${url}' (path = '${path}')`)
 	return fsp.writeFile(url, JSON.stringify(data), 'utf8')
 }
+
+export function stringifyNumber(value: number, radix: number): string {
+	const GroupSize = 4
+
+	const rawRepresentation = value.toString(radix)
+
+	return rawRepresentation
+		.split('')
+		.map((c, i) =>
+			// insert a space every 4 digits, excluding the first one.
+			i !== 0 &&
+			(rawRepresentation.length - 1 - i) % GroupSize === GroupSize - 1
+				? ` ${c}`
+				: c,
+		)
+		.join('')
+}
