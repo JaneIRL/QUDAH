@@ -41,8 +41,8 @@ the content should be in https://www.json.org[the JSON format].
 * root object
 ** `token`: (`string`) the Discord bot token.
 ** `radix`: (`2 | 10 | 16`) the radix to use for the special numerical counting operations.
-** `channel`: (`Snowflake`) the https://discord.com/developers/docs/reference#snowflakes[Snowflake ID] of the channel where the special numerical counting operations are hosted.
-** `guild`: (`Snowflake`) the Snowflake ID of the guild.
+** `channel`: (`string`) the https://discord.com/developers/docs/reference#snowflakes[Snowflake ID] of the channel where the special numerical counting operations are hosted.
+** `guild`: (`string`) the Snowflake ID of the guild.
 
 == storage
 
