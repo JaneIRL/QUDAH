@@ -9,7 +9,7 @@ import {
 } from 'discord.js'
 import { loadConfig, QudahConfig, Radix } from './config.js'
 import { loadStore, Store, updateStore } from './store.js'
-import { stringifyNumber } from './util.js'
+import { deleteMessageWithDelay, stringifyNumber } from './util.js'
 
 const client = new Client({
 	intents: ['Guilds', 'GuildMessages', 'GuildWebhooks', 'MessageContent'],
@@ -56,6 +56,8 @@ function getMessageCreateHandler(
 	webhook: Webhook,
 	guild: Guild,
 ): (...args: ClientEvents['messageCreate']) => Awaitable<void> {
+	const NoticeDurationMs = 5_000
+
 	let layerCounter = 0
 	return async (message) => {
 		if (
@@ -71,12 +73,19 @@ function getMessageCreateHandler(
 		try {
 			if (layerCounter > 1) {
 				// race condition
+				sendNotice('that was took quick, please try again later.')
+				return
+			}
+
+			if (message.author.id === storePtr[0].previous_user) {
+				sendNotice('you can only count once in a row.')
 				return
 			}
 
 			const parsedMessage = parseUserMessage(message.content, config.radix)
 
 			if (parsedMessage.representation === '') {
+				sendNotice("i couldn't find any numbers in your previous message.")
 				return
 			}
 
@@ -100,7 +109,10 @@ function getMessageCreateHandler(
 				previousValue === undefined ||
 				parsedMessage.value === previousValue + 1
 			) {
-				await updateStore(storePtr, { previous_value: parsedMessage.value })
+				await updateStore(storePtr, {
+					previous_user: message.author.id,
+					previous_value: parsedMessage.value,
+				})
 			} else {
 				await webhook.send({
 					embeds: [
@@ -120,7 +132,10 @@ function getMessageCreateHandler(
 							),
 					],
 				})
-				await updateStore(storePtr, { previous_value: -1 })
+				await updateStore(storePtr, {
+					previous_user: message.author.id,
+					previous_value: -1,
+				})
 			}
 		} catch (e) {
 			console.error('[messageCreateHandler]', e)
@@ -131,6 +146,16 @@ function getMessageCreateHandler(
 				console.error('[messageCreateHandler] message.delete', e)
 			}
 			layerCounter--
+		}
+
+		function sendNotice(content: string) {
+			void deleteMessageWithDelay(
+				message.channel.send({
+					content: `<@${message.author.id}> ${content}`,
+					allowedMentions: { parse: ['users'] },
+				}),
+				NoticeDurationMs,
+			)
 		}
 	}
 }

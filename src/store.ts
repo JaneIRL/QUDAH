@@ -5,6 +5,7 @@ const Path = process.env['STORE_PATH'] ?? './store.json'
 
 export interface Store {
 	previous_value?: number
+	previous_user?: Snowflake
 	webhook?: Snowflake
 }
 function assertStore(_v: unknown): asserts _v is Store {

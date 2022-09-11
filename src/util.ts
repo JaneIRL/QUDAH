@@ -1,3 +1,4 @@
+import type { Message } from 'discord.js'
 import { promises as fsp } from 'fs'
 
 export function stringifyError(e: unknown): string {
@@ -43,4 +44,25 @@ export function stringifyNumber(value: number, radix: number): string {
 				: c,
 		)
 		.join('')
+}
+
+export async function deleteMessageWithDelay(
+	messagePromise: Promise<Message>,
+	delayMs: number,
+): Promise<void> {
+	try {
+		const message = await messagePromise
+		return new Promise((resolve) => {
+			setTimeout(async () => {
+				try {
+					await message.delete()
+				} catch (e) {
+					console.error('[deleteMessageWithDelay] delete', e)
+				}
+				resolve()
+			}, delayMs)
+		})
+	} catch (e) {
+		console.error('[deleteMessageWithDelay] send', e)
+	}
 }
