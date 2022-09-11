@@ -17,7 +17,7 @@ function assertQudahConfig(
 	if (typeof token !== 'string') {
 		throw new Error('invalid token; string expected')
 	} else if (!isRadix(radix)) {
-		throw new Error('invalid radix; 2, 10, or 16 expected')
+		throw new Error(`invalid radix; ${Radixes.join(' | ')} expected`)
 	} else if (typeof channel !== 'string') {
 		throw new Error('invalid channel; Snowflake ID in string form expected')
 	} else if (typeof guild !== 'string') {
