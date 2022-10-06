@@ -178,6 +178,9 @@ function parseUserMessage(message: string, radix: Radix): UserMessage {
 				.map((_, i) => String.fromCharCode('a'.charCodeAt(0) + i)),
 		].slice(0, radix),
 	)
+	if (radix > 10) {
+		DigitSet.add('x')
+	}
 	const DeniedPattern = /^[|\u200f]$/iu
 	const WhitespacePattern = /^[ \t\n\r]$/iu
 
