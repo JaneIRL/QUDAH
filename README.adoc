@@ -43,6 +43,7 @@ the content should be in https://www.json.org[the JSON format].
 ** `radix`: (`2 | 10 | 16`) the radix to use for the special numerical counting operations.
 ** `channel`: (`string`) the https://discord.com/developers/docs/reference#snowflakes[Snowflake ID] of the channel where the special numerical counting operations are hosted.
 ** `guild`: (`string`) the Snowflake ID of the guild.
+** `resume_on_error`: (`boolean?`) optional; whether to resume counting on malfunctioning.
 
 == storage
 

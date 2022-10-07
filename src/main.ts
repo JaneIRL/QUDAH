@@ -118,27 +118,31 @@ function getMessageCreateHandler(
 					previous_value: parsedMessage.value,
 				})
 			} else {
-				await webhook.send({
-					embeds: [
-						new EmbedBuilder()
-							.setTitle('defective unit detected')
-							.setDescription(
-								`<@${message.author.id}> just malfunctioned!
-						\`\`\`diff
-						+ ${stringifyNumber(previousValue + 1, config.radix)}
-						- ${stringifyNumber(parsedMessage.value, config.radix)}
-						\`\`\`
-						we successfully counted to \`${stringifyNumber(
-							previousValue,
-							config.radix,
-						)}\` (decimal \`${previousValue}\`). let's try again starting from \`0\`.
-						`.replace(/^\s+/gm, ''),
-							),
-					],
-				})
+				if (config.resume_on_error) {
+					sendNotice(`no, \`${stringifyNumber(parsedMessage.value, config.radix)}\` is not it.`)
+				} else {
+					await webhook.send({
+						embeds: [
+							new EmbedBuilder()
+								.setTitle('defective unit detected')
+								.setDescription(
+									`<@${message.author.id}> just malfunctioned!
+							\`\`\`diff
+							+ ${stringifyNumber(previousValue + 1, config.radix)}
+							- ${stringifyNumber(parsedMessage.value, config.radix)}
+							\`\`\`
+							we successfully counted to \`${stringifyNumber(
+								previousValue,
+								config.radix,
+							)}\` (decimal \`${previousValue}\`). let's try again starting from \`0\`.
+							`.replace(/^\s+/gm, ''),
+								),
+						],
+					})
+				}
 				await updateStore(storePtr, {
 					previous_user: message.author.id,
-					previous_value: -1,
+					...(config.resume_on_error ? {} : { previous_value: -1 }),
 				})
 			}
 		} catch (e) {

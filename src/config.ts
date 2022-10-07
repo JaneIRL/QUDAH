@@ -8,12 +8,13 @@ export interface QudahConfig {
 	radix: Radix
 	channel: Snowflake
 	guild: Snowflake
+	resume_on_error?: boolean
 }
 function assertQudahConfig(
 	this: void,
 	obj: unknown,
 ): asserts obj is QudahConfig {
-	const { token, radix, channel, guild } = obj as Record<string, unknown>
+	const { token, radix, channel, guild, resume_on_error} = obj as Record<string, unknown>
 	if (typeof token !== 'string') {
 		throw new Error('invalid token; string expected')
 	} else if (!isRadix(radix)) {
@@ -22,6 +23,8 @@ function assertQudahConfig(
 		throw new Error('invalid channel; Snowflake ID in string form expected')
 	} else if (typeof guild !== 'string') {
 		throw new Error('invalid guild; Snowflake ID in string form expected')
+	} else if (typeof resume_on_error !== 'boolean' && typeof resume_on_error !== 'undefined') {
+		throw new Error('invalid resume_on_error; boolean or undefined expected')
 	}
 }
 
