@@ -40,8 +40,8 @@ export function stringifyNumber(value: number, radix: number): string {
 			// insert a space every 4 digits, excluding the first one.
 			i !== 0 &&
 			(rawRepresentation.length - 1 - i) % GroupSize === GroupSize - 1
-				? ` ${c}`
-				: c,
+				? ` ${c.toUpperCase()}`
+				: c.toUpperCase(),
 		)
 		.join('')
 	return radix === 16 ? `0x${presentation}` : presentation
