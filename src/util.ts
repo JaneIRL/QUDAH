@@ -34,7 +34,7 @@ export function stringifyNumber(value: number, radix: number): string {
 
 	const rawRepresentation = value.toString(radix)
 
-	return rawRepresentation
+	const presentation = rawRepresentation
 		.split('')
 		.map((c, i) =>
 			// insert a space every 4 digits, excluding the first one.
@@ -44,6 +44,7 @@ export function stringifyNumber(value: number, radix: number): string {
 				: c,
 		)
 		.join('')
+	return radix === 16 ? `0x${presentation}` : presentation
 }
 
 export async function deleteMessageWithDelay(
