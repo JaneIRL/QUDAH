@@ -36,12 +36,13 @@ export function stringifyNumber(value: number, radix: number): string {
 
 	const presentation = rawRepresentation
 		.split('')
+		.map(c => c.toUpperCase())
 		.map((c, i) =>
 			// insert a space every 4 digits, excluding the first one.
 			i !== 0 &&
 			(rawRepresentation.length - 1 - i) % GroupSize === GroupSize - 1
-				? ` ${c.toUpperCase()}`
-				: c.toUpperCase(),
+				? ` ${c}`
+				: c,
 		)
 		.join('')
 	return radix === 16 ? `0x${presentation}` : presentation
