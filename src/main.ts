@@ -82,7 +82,12 @@ function getMessageCreateHandler(
 				return
 			}
 
-			const parsedMessage = parseUserMessage(message.content, config.radix)
+			const previousValue = storePtr[0].previous_value
+			const parsedMessage = parseUserMessage(
+				message.content,
+				config.radix,
+				previousValue ? previousValue + 1 : undefined,
+			)
 
 			if (parsedMessage.representation === '') {
 				sendNotice("i couldn't find any numbers in your previous message.")
@@ -104,7 +109,6 @@ function getMessageCreateHandler(
 			})
 
 			// check if the user submitted value is correct
-			const previousValue = storePtr[0].previous_value
 			if (
 				previousValue === undefined ||
 				parsedMessage.value === previousValue + 1
@@ -166,7 +170,11 @@ interface UserMessage {
 	value: number
 }
 
-function parseUserMessage(message: string, radix: Radix): UserMessage {
+function parseUserMessage(
+	message: string,
+	radix: Radix,
+	expectedValue: number | undefined,
+): UserMessage {
 	type State = 'prefix' | 'representation' | 'note'
 	const DigitSet = new Set(
 		[
@@ -204,6 +212,10 @@ function parseUserMessage(message: string, radix: Radix): UserMessage {
 	// legend:
 	// * ────► transition state to. no character is consumed.
 	// * ────▷ append character to. character is consumed.
+	//
+	// early termination condition:
+	// if the current value is the expected value,
+	// the state will be changed to "note" immediately.
 
 	for (const char of message) {
 		if (state === 'prefix') {
@@ -216,6 +228,10 @@ function parseUserMessage(message: string, radix: Radix): UserMessage {
 		if (state === 'representation') {
 			if (DigitSet.has(char.toLowerCase())) {
 				ans.representation += char
+				if (parseInt(ans.representation, radix) === expectedValue) {
+					// Early termination.
+					state = 'note'
+				}
 			} else if (!WhitespacePattern.test(char)) {
 				state = 'note'
 			}
