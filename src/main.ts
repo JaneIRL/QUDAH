@@ -231,6 +231,7 @@ function parseUserMessage(
 				if (parseInt(ans.representation, radix) === expectedValue) {
 					// Early termination.
 					state = 'note'
+					continue
 				}
 			} else if (!WhitespacePattern.test(char)) {
 				state = 'note'
