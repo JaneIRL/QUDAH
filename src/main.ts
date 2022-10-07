@@ -119,7 +119,10 @@ function getMessageCreateHandler(
 				})
 			} else {
 				if (config.resume_on_error) {
-					sendNotice(`no, \`${stringifyNumber(parsedMessage.value, config.radix)}\` is not it.`)
+					await message.channel.send({
+					content: `<@${message.author.id}> no, \`${stringifyNumber(parsedMessage.value, config.radix)}\` is not it.`,
+					allowedMentions: { parse: ['users'] },
+				})
 				} else {
 					await webhook.send({
 						embeds: [
