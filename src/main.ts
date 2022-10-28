@@ -4,6 +4,9 @@ import {
 	ClientEvents,
 	EmbedBuilder,
 	Guild,
+	Routes,
+	SlashCommandBuilder,
+	SlashCommandStringOption,
 	TextChannel,
 	Webhook,
 } from 'discord.js'
@@ -41,10 +44,13 @@ try {
 		webhook = await client.fetchWebhook(storePtr[0].webhook)
 	}
 
+	registerCommands(client, config)
+
 	client.on(
 		'messageCreate',
 		getMessageCreateHandler(config, storePtr, webhook, guild),
 	)
+	client.on('interactionCreate', getInteractionCreateHandler())
 } catch (e) {
 	console.error('[startup]', e)
 	client.destroy()
@@ -120,9 +126,12 @@ function getMessageCreateHandler(
 			} else {
 				if (config.resume_on_error) {
 					await message.channel.send({
-					content: `<@${message.author.id}> no, \`${stringifyNumber(parsedMessage.value, config.radix)}\` is not it.`,
-					allowedMentions: { parse: ['users'] },
-				})
+						content: `<@${message.author.id}> no, \`${stringifyNumber(
+							parsedMessage.value,
+							config.radix,
+						)}\` is not it.`,
+						allowedMentions: { parse: ['users'] },
+					})
 				} else {
 					await webhook.send({
 						embeds: [
@@ -264,4 +273,94 @@ function parseUserMessage(
 	}
 
 	return ans
+}
+
+function registerCommands(client: Client<boolean>, config: QudahConfig) {
+	const kissCommand = new SlashCommandBuilder()
+		.setName('kiss')
+		.setDescription('Kiss QUDAH')
+		.toJSON()
+	const pickTheBestCommand = new SlashCommandBuilder()
+		.setName('pick-the-best')
+		.setDescription("Ask for QUDAH's opinion on which one is the best option")
+		.addStringOption(
+			new SlashCommandStringOption()
+				.setName('option0')
+				.setDescription('Option 0')
+				.setRequired(true),
+		)
+		.addStringOption(
+			new SlashCommandStringOption()
+				.setName('option1')
+				.setDescription('Option 1')
+				.setRequired(true),
+		)
+		.addStringOption(
+			new SlashCommandStringOption()
+				.setName('option2')
+				.setDescription('Option 2'),
+		)
+		.addStringOption(
+			new SlashCommandStringOption()
+				.setName('option3')
+				.setDescription('Option 3'),
+		)
+		.addStringOption(
+			new SlashCommandStringOption()
+				.setName('option4')
+				.setDescription('Option 4'),
+		)
+		.toJSON()
+
+	const clientId = client.user?.id
+	if (!clientId) {
+		return
+	}
+
+	return client.rest.put(
+		Routes.applicationGuildCommands(clientId, config.guild),
+		{
+			body: [kissCommand, pickTheBestCommand],
+		},
+	)
+}
+
+function getInteractionCreateHandler(): (
+	// config: QudahConfig,
+	// storePtr: [Readonly<Store>],
+	// webhook: Webhook,
+	// guild: Guild,
+	...args: ClientEvents['interactionCreate']
+) => Awaitable<void> {
+	return async (interaction) => {
+		if (!interaction.isChatInputCommand()) {
+			return
+		}
+
+		try {
+			switch (interaction.commandName) {
+				case 'kiss':
+					await interaction.reply({
+						content: `mwah in ${client.ws.ping} ms :kissing_heart:`,
+					})
+					break
+				case 'pick-the-best': {
+					const options = new Array(5)
+						.fill(undefined)
+						.map((_, i) => interaction.options.getString(`option${i}`))
+						.filter((v: string | null): v is string => !!v)
+					await interaction.reply({
+						content: `${options
+							.map((option) => `use ${option} if ${option} works the best for you`)
+							.join('; ')}. it really is that simple, you fucking idiot.`,
+					})
+					break
+				}
+				default:
+					break
+			}
+		} catch (e) {
+			console.error('[interactionCreateHandler]', e)
+		}
+	}
 }
