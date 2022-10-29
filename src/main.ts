@@ -699,7 +699,11 @@ async function registerCommands(
 											.setMaxValues(roleOptions.length)
 											.setOptions(
 												...roleOptions
-													.sort((a, b) => (a.label < b.label ? -1 : 1))
+													.sort((a, b) =>
+														a.label.toLowerCase() < b.label.toLowerCase()
+															? -1
+															: 1,
+													)
 													.map(({ id, label, selected }) =>
 														new SelectMenuOptionBuilder()
 															.setLabel(label)
@@ -737,9 +741,9 @@ async function registerCommands(
 												.map(
 													(v, i) =>
 														`${
-															i === currentCategoryIndex ? '**' : ''
+															i === currentCategoryIndex ? '__**' : ''
 														}${i}. ${v}${
-															i === currentCategoryIndex ? '**' : ''
+															i === currentCategoryIndex ? '**__' : ''
 														}`,
 												)
 												.join(' > '),
