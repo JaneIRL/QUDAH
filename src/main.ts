@@ -29,6 +29,7 @@ import { deleteMessageWithDelay, stringifyNumber } from './util.js'
 import * as readline from 'readline'
 
 const SelectMenuMaxOptions = 25
+const MaxCategories = 10
 const SaveStoreIntervalMs = 3600_000
 const InteractionTimeoutMs = 120_000
 
@@ -519,9 +520,9 @@ async function registerCommands(
 							await interaction.reply({
 								content: `:x: Category names can only contain 1-32 alphanumeric characters.`,
 							})
-						} else if (Object.keys(store.roles).length >= 5) {
+						} else if (Object.keys(store.roles).length >= MaxCategories) {
 							await interaction.reply({
-								content: `:x: At most 5 categories can be registered.`,
+								content: `:x: At most ${MaxCategories} categories can be registered.`,
 							})
 						} else if (store.roles[category]) {
 							await interaction.reply({
