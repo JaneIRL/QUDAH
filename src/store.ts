@@ -6,15 +6,21 @@ const Path = process.env['STORE_PATH'] ?? './store.json'
 export interface Store {
 	previous_value?: number
 	previous_user?: Snowflake
+	roles: Record<string, Snowflake[]>
 	webhook?: Snowflake
 }
-function assertStore(_v: unknown): asserts _v is Store {
-	// TODO
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function assertStore(v: any): asserts v is Store {
+	if (!(v.roles && typeof v.roles === 'object')) {
+		throw new Error('Not a valid store object.')
+	}
 }
 
-const FallbackStore = Object.freeze({})
+const FallbackStore = Object.freeze({
+	roles: { pronouns: [] },
+})
 
-export async function loadStore(): Promise<Readonly<Store>> {
+export async function loadStore(): Promise<Store> {
 	try {
 		return await loadJsonFile(Path, assertStore)
 	} catch (e) {
@@ -28,11 +34,6 @@ export async function loadStore(): Promise<Readonly<Store>> {
 	}
 }
 
-export async function updateStore(
-	storePtr: [Readonly<Store>],
-	delta: Partial<Store>,
-): Promise<void> {
-	const newStore = Object.freeze({ ...storePtr[0], ...delta })
-	await saveJsonFile(Path, newStore)
-	storePtr[0] = newStore
+export async function saveStore(store: Store): Promise<void> {
+	return saveJsonFile(Path, store)
 }

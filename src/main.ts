@@ -1,18 +1,36 @@
 import {
+	ActionRowBuilder,
 	Awaitable,
+	ButtonBuilder,
+	ButtonInteraction,
+	ButtonStyle,
+	ChatInputCommandInteraction,
 	Client,
 	ClientEvents,
 	EmbedBuilder,
 	Guild,
+	Message,
+	PermissionFlagsBits,
+	RESTPostAPIApplicationCommandsJSONBody,
 	Routes,
+	SelectMenuBuilder,
+	SelectMenuOptionBuilder,
 	SlashCommandBuilder,
+	SlashCommandRoleOption,
 	SlashCommandStringOption,
+	SlashCommandSubcommandBuilder,
+	SlashCommandSubcommandGroupBuilder,
 	TextChannel,
 	Webhook,
 } from 'discord.js'
 import { loadConfig, QudahConfig, Radix } from './config.js'
-import { loadStore, Store, updateStore } from './store.js'
+import { loadStore, saveStore, Store } from './store.js'
 import { deleteMessageWithDelay, stringifyNumber } from './util.js'
+import * as readline from 'readline'
+
+const SelectMenuMaxOptions = 25
+const SaveStoreIntervalMs = 3600_000
+const InteractionTimeoutMs = 120_000
 
 const client = new Client({
 	intents: ['Guilds', 'GuildMessages', 'GuildWebhooks', 'MessageContent'],
@@ -20,8 +38,7 @@ const client = new Client({
 
 try {
 	const config = await loadConfig()
-	/** a single-element tuple of an immutable object */
-	const storePtr: [Readonly<Store>] = [await loadStore()]
+	const store = await loadStore()
 	await client.login(config.token)
 
 	const channel = await client.channels.fetch(config.channel)
@@ -35,30 +52,56 @@ try {
 	}
 
 	let webhook: Webhook | undefined
-	if (!storePtr[0].webhook) {
+	if (!store.webhook) {
 		webhook = await channel.createWebhook({
 			name: 'QUDAH',
 		})
-		await updateStore(storePtr, { webhook: webhook.id })
+		store.webhook = webhook.id
 	} else {
-		webhook = await client.fetchWebhook(storePtr[0].webhook)
+		webhook = await client.fetchWebhook(store.webhook)
 	}
-
-	registerCommands(client, config)
 
 	client.on(
 		'messageCreate',
-		getMessageCreateHandler(config, storePtr, webhook, guild),
+		getMessageCreateHandler(config, store, webhook, guild),
 	)
-	client.on('interactionCreate', getInteractionCreateHandler())
+
+	await registerCommands(client, config, guild, store)
+
+	setInterval(() => saveStore(store), SaveStoreIntervalMs)
+
+	readline
+		.createInterface({
+			input: process.stdin,
+		})
+		.on('line', (line) => {
+			if (line === 'exit') {
+				exit(store)
+			} else if (line === 'save') {
+				saveStore(store)
+			}
+		})
+
+	process.on('SIGINT', () => {
+		exit(store)
+	})
+
+	console.info(`[main] Bot is up at ${client.ws.ping} ms ping.`)
 } catch (e) {
 	console.error('[startup]', e)
 	client.destroy()
 }
 
+async function exit(store: Store) {
+	console.info('[main] Exiting...')
+	await saveStore(store)
+	client.destroy()
+	process.exit()
+}
+
 function getMessageCreateHandler(
 	config: QudahConfig,
-	storePtr: [Readonly<Store>],
+	store: Store,
 	webhook: Webhook,
 	guild: Guild,
 ): (...args: ClientEvents['messageCreate']) => Awaitable<void> {
@@ -83,12 +126,12 @@ function getMessageCreateHandler(
 				return
 			}
 
-			if (message.author.id === storePtr[0].previous_user) {
+			if (message.author.id === store.previous_user) {
 				sendNotice('you can only count once in a row.')
 				return
 			}
 
-			const previousValue = storePtr[0].previous_value
+			const previousValue = store.previous_value
 			const parsedMessage = parseUserMessage(
 				message.content,
 				config.radix,
@@ -119,10 +162,8 @@ function getMessageCreateHandler(
 				previousValue === undefined ||
 				parsedMessage.value === previousValue + 1
 			) {
-				await updateStore(storePtr, {
-					previous_user: message.author.id,
-					previous_value: parsedMessage.value,
-				})
+				store.previous_user = message.author.id
+				store.previous_value = parsedMessage.value
 			} else {
 				if (config.resume_on_error) {
 					await message.channel.send({
@@ -152,10 +193,10 @@ function getMessageCreateHandler(
 						],
 					})
 				}
-				await updateStore(storePtr, {
-					previous_user: message.author.id,
-					...(config.resume_on_error ? {} : { previous_value: -1 }),
-				})
+				store.previous_user = message.author.id
+				if (!config.resume_on_error) {
+					store.previous_value = -1
+				}
 			}
 		} catch (e) {
 			console.error('[messageCreateHandler]', e)
@@ -195,11 +236,9 @@ function parseUserMessage(
 	const DigitSet = new Set(
 		[
 			// '0' to '9'
-			...new Array(10).fill(42).map((_, i) => `${i}`),
+			...newArray(10, (i) => `${i}`),
 			// 'a' to 'f'
-			...new Array(6)
-				.fill(42)
-				.map((_, i) => String.fromCharCode('a'.charCodeAt(0) + i)),
+			...newArray(6, (i) => String.fromCharCode('a'.charCodeAt(0) + i)),
 		].slice(0, radix),
 	)
 	if (radix > 10) {
@@ -275,92 +314,521 @@ function parseUserMessage(
 	return ans
 }
 
-function registerCommands(client: Client<boolean>, config: QudahConfig) {
-	const kissCommand = new SlashCommandBuilder()
-		.setName('kiss')
-		.setDescription('Kiss QUDAH')
-		.toJSON()
-	const pickTheBestCommand = new SlashCommandBuilder()
-		.setName('pick-the-best')
-		.setDescription("Ask for QUDAH's opinion on which one is the best option")
-		.addStringOption(
-			new SlashCommandStringOption()
-				.setName('option0')
-				.setDescription('Option 0')
-				.setRequired(true),
-		)
-		.addStringOption(
-			new SlashCommandStringOption()
-				.setName('option1')
-				.setDescription('Option 1')
-				.setRequired(true),
-		)
-		.addStringOption(
-			new SlashCommandStringOption()
-				.setName('option2')
-				.setDescription('Option 2'),
-		)
-		.addStringOption(
-			new SlashCommandStringOption()
-				.setName('option3')
-				.setDescription('Option 3'),
-		)
-		.addStringOption(
-			new SlashCommandStringOption()
-				.setName('option4')
-				.setDescription('Option 4'),
-		)
-		.toJSON()
-
+async function registerCommands(
+	client: Client<boolean>,
+	config: QudahConfig,
+	guild: Guild,
+	store: Store,
+): Promise<void> {
 	const clientId = client.user?.id
 	if (!clientId) {
-		return
+		throw new Error('Cannot find client ID.')
 	}
 
-	return client.rest.put(
+	interface Registration {
+		command: RESTPostAPIApplicationCommandsJSONBody
+		handler: (interaction: ChatInputCommandInteraction) => Awaitable<unknown>
+		init?: () => unknown
+	}
+
+	const CustomIds = Object.freeze({
+		SelectRoles: 'select-roles',
+		SelectRolesPrefix: 'select-roles-',
+		TurnPagePrefix: 'turn-page-',
+	})
+
+	const Registrations: Record<string, Registration> = {
+		kiss: {
+			command: new SlashCommandBuilder()
+				.setName('kiss')
+				.setDescription('Kiss QUDAH')
+				.toJSON(),
+			handler: async (interaction) => {
+				await interaction.reply({
+					content: `Mwah in ${client.ws.ping} ms :kissing_heart:`,
+					fetchReply: false,
+				})
+			},
+		},
+		'pick-the-best': {
+			command: new SlashCommandBuilder()
+				.setName('pick-the-best')
+				.setDescription(
+					"Ask for QUDAH's opinion on which one is the best option",
+				)
+				.addStringOption(
+					new SlashCommandStringOption()
+						.setName('option0')
+						.setDescription('Option 0')
+						.setRequired(true),
+				)
+				.addStringOption(
+					new SlashCommandStringOption()
+						.setName('option1')
+						.setDescription('Option 1')
+						.setRequired(true),
+				)
+				.addStringOption(
+					new SlashCommandStringOption()
+						.setName('option2')
+						.setDescription('Option 2'),
+				)
+				.addStringOption(
+					new SlashCommandStringOption()
+						.setName('option3')
+						.setDescription('Option 3'),
+				)
+				.addStringOption(
+					new SlashCommandStringOption()
+						.setName('option4')
+						.setDescription('Option 4'),
+				)
+				.toJSON(),
+			handler: async (interaction) => {
+				const options = newArray(5, (i) =>
+					interaction.options.getString(`option${i}`),
+				).filter((v: string | null): v is string => !!v)
+				await interaction.reply({
+					content: `${options
+						.map(
+							(option) => `Use ${option} if ${option} works the best for you`,
+						)
+						.join('. ')}. It really is that simple, you fucking idiot.`,
+					fetchReply: false,
+				})
+			},
+		},
+		sudo: {
+			command: new SlashCommandBuilder()
+				.setName('sudo')
+				.setDescription('For those close to QUDAH')
+				.setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+				.addSubcommandGroup(
+					new SlashCommandSubcommandGroupBuilder()
+						.setName('role')
+						.setDescription('Role related commands')
+						.addSubcommand(
+							new SlashCommandSubcommandBuilder()
+								.setName('list-categories')
+								.setDescription('List existing role categories'),
+						)
+						.addSubcommand(
+							new SlashCommandSubcommandBuilder()
+								.setName('order-categories')
+								.setDescription('Order existing role categories')
+								.addStringOption(
+									new SlashCommandStringOption()
+										.setName('categories')
+										.setDescription('Comma separated list of categories')
+										.setRequired(true),
+								),
+						)
+						.addSubcommand(
+							new SlashCommandSubcommandBuilder()
+								.setName('register-category')
+								.setDescription(
+									'Register a role category into the QUDAH system',
+								)
+								.addStringOption(
+									new SlashCommandStringOption()
+										.setName('category')
+										.setDescription('The category of the role')
+										.setRequired(true),
+								),
+						)
+						.addSubcommand(
+							new SlashCommandSubcommandBuilder()
+								.setName('register-role')
+								.setDescription('Register a role into the QUDAH system')
+								.addStringOption(
+									new SlashCommandStringOption()
+										.setName('category')
+										.setDescription('The category of the role')
+										.setChoices(
+											...Object.keys(store.roles).map((r) => ({
+												name: r,
+												value: r,
+											})),
+										)
+										.setRequired(true),
+								)
+								.addRoleOption(
+									new SlashCommandRoleOption()
+										.setName('role')
+										.setDescription('The role to register')
+										.setRequired(true),
+								),
+						)
+						.addSubcommand(
+							new SlashCommandSubcommandBuilder()
+								.setName('send-prompt')
+								.setDescription('Send the role prompt to the current channel')
+								.addStringOption(
+									new SlashCommandStringOption()
+										.setName('content')
+										.setDescription('The text content of the prompt')
+										.setRequired(true),
+								),
+						),
+				)
+				.toJSON(),
+			handler: async (interaction) => {
+				const subcommandGroup = interaction.options.getSubcommandGroup(true)
+				const subcommand = interaction.options.getSubcommand(true)
+				if (subcommandGroup === 'role') {
+					if (subcommand === 'list-categories') {
+						await interaction.reply({
+							content: `Existing categories: ${Object.keys(store.roles).join(
+								', ',
+							)}.`,
+						})
+					} else if (subcommand === 'order-categories') {
+						const oldCategories = Object.keys(store.roles)
+						const newCategories = interaction.options
+							.getString('categories', true)
+							.split(/,\s*/)
+						if (oldCategories.some((c) => !newCategories.includes(c))) {
+							await interaction.reply({
+								content: `:x: The following categories are not included: ${oldCategories
+									.filter((c) => !newCategories.includes(c))
+									.join(', ')}.`,
+							})
+						} else if (newCategories.some((c) => !oldCategories.includes(c))) {
+							await interaction.reply({
+								content: `:x: The following categories do not exist: ${newCategories
+									.filter((c) => !oldCategories.includes(c))
+									.join(', ')}.`,
+							})
+						} else if (newCategories.length !== oldCategories.length) {
+							await interaction.reply({
+								content: `:x: Duplicated categories: ${newCategories
+									.filter((c, i) => newCategories.indexOf(c) !== i)
+									.join(', ')}.`,
+							})
+						} else {
+							store.roles = Object.fromEntries(
+								newCategories.map((c) => [c, store.roles[c]!]),
+							)
+							await interaction.reply({
+								content: ':white_check_mark: Ordered categories.',
+							})
+						}
+					} else if (subcommand === 'register-category') {
+						const category = interaction.options.getString('category', true)
+						if (!category.match(/^[a-zA-Z0-9]{1,32}$/)) {
+							await interaction.reply({
+								content: `:x: Category names can only contain 1-32 alphanumeric characters.`,
+							})
+						} else if (Object.keys(store.roles).length >= 5) {
+							await interaction.reply({
+								content: `:x: At most 5 categories can be registered.`,
+							})
+						} else if (store.roles[category]) {
+							await interaction.reply({
+								content: `:x: The category '${category}' already exists.`,
+							})
+						} else {
+							store.roles[category] = []
+							await interaction.reply({
+								content: `:white_check_mark: The category '${category}' has been registered.`,
+							})
+						}
+					} else if (subcommand === 'register-role') {
+						const category = interaction.options.getString('category', true)
+						const role = interaction.options.getRole('role', true)
+						const storeRoles = store.roles[category]
+						if (!storeRoles) {
+							await interaction.reply({
+								content: `:x: Unknown category '${category}'.`,
+							})
+						} else if (storeRoles.length >= SelectMenuMaxOptions * 4) {
+							await interaction.reply({
+								content: `:x: No more than ${
+									SelectMenuMaxOptions * 4
+								} roles can be registered under a single category.`,
+							})
+						} else if (storeRoles.includes(role.id)) {
+							await interaction.reply({
+								content: `:x: The role '${role.name}' has already been registered under the category '${category}'.`,
+							})
+						} else {
+							storeRoles.push(role.id)
+							await interaction.reply({
+								content: `:white_check_mark: The role '${role.name}' has been registered under the category '${category}'.`,
+							})
+						}
+					} else if (subcommand === 'send-prompt') {
+						const channel = interaction.channel
+						if (!channel) {
+							return
+						}
+
+						const content = interaction.options.getString('content', true)
+						await channel.send({
+							allowedMentions: {},
+							components: [
+								new ActionRowBuilder<ButtonBuilder>().addComponents(
+									new ButtonBuilder()
+										.setCustomId(CustomIds.SelectRoles)
+										.setLabel('Select Roles')
+										.setStyle(ButtonStyle.Primary),
+								),
+							],
+							embeds: [
+								new EmbedBuilder().setColor('White').setDescription(content),
+							],
+						})
+						await interaction.reply({
+							content: 'sent',
+							ephemeral: true,
+							fetchReply: false,
+						})
+					}
+				}
+			},
+			init: () => {
+				client.on('interactionCreate', async (interaction) => {
+					if (
+						!(
+							interaction.isButton() &&
+							interaction.customId === CustomIds.SelectRoles
+						)
+					) {
+						return
+					}
+
+					try {
+						const reply = await interaction.deferReply({
+							ephemeral: true,
+							fetchReply: true,
+						})
+						showMenu(interaction, 0, reply)
+					} catch (e) {
+						console.error('[role selection interaction handler]', e)
+					}
+
+					async function showMenu(
+						interaction: ButtonInteraction,
+						currentCategoryIndex: number,
+						reply: Message<boolean>,
+					): Promise<void> {
+						type RoleOption = { label: string; id: string; selected: boolean }
+
+						try {
+							const nonEmptyCategories = Object.entries(store.roles)
+								.filter(([, v]) => v.length)
+								.map(([k]) => k)
+							const category = nonEmptyCategories[currentCategoryIndex]
+							if (!category) {
+								await sendFinalReply()
+								return
+							}
+
+							const roleOptions = await getRoleOptions(store.roles[category]!)
+							await sendSelectionReply(
+								category,
+								roleOptions,
+								nonEmptyCategories,
+							)
+
+							try {
+								const subInteraction = await awaitInteraction(category)
+								try {
+									if (subInteraction.isSelectMenu()) {
+										await updateRoles(category, subInteraction.values)
+										await showMenu(interaction, currentCategoryIndex + 1, reply)
+									} else {
+										const nextIndex = parseInt(
+											subInteraction.customId.slice(
+												CustomIds.TurnPagePrefix.length,
+											),
+										)
+										await showMenu(interaction, nextIndex, reply)
+									}
+								} catch (e) {
+									console.error('[role selection interaction response]', e)
+								}
+							} catch (_ignored) {
+								// Timed out.
+								await sendTimeoutReply()
+							}
+						} catch (e) {
+							console.error('[role selection interaction show menu]', e)
+						}
+
+						async function getRoleOptions(roleIds: string[]) {
+							const ans: RoleOption[] = []
+							for (const roleId of roleIds) {
+								const role = await guild.roles.fetch(roleId)
+								if (role) {
+									const member = await guild.members.fetch(interaction.user.id)
+									const hasRole = member.roles.cache.has(roleId)
+									ans.push({ label: role.name, id: role.id, selected: hasRole })
+								} else {
+									// The role no longer exists. Remove it from store.
+									roleIds.splice(roleIds.indexOf(roleId), 1)
+								}
+							}
+							return ans
+						}
+
+						async function sendFinalReply() {
+							return interaction.editReply({
+								components: [],
+								embeds: [
+									new EmbedBuilder()
+										.setTitle('Role Selection')
+										.setColor('DarkGreen')
+										.setDescription("You've updated your roles!"),
+								],
+							})
+						}
+
+						async function sendSelectionReply(
+							category: string,
+							roleOptions: RoleOption[],
+							nonEmptyCategories: string[],
+						) {
+							await interaction.editReply({
+								components: [
+									new ActionRowBuilder<SelectMenuBuilder>().addComponents(
+										new SelectMenuBuilder()
+											.setCustomId(`${CustomIds.SelectRolesPrefix}${category}`)
+											.setMinValues(0)
+											.setMaxValues(roleOptions.length)
+											.setOptions(
+												...roleOptions
+													.sort((a, b) => (a.label < b.label ? -1 : 1))
+													.map(({ id, label, selected }) =>
+														new SelectMenuOptionBuilder()
+															.setLabel(label)
+															.setValue(id)
+															.setDefault(selected),
+													),
+											),
+									),
+									new ActionRowBuilder<ButtonBuilder>().addComponents(
+										new ButtonBuilder()
+											.setCustomId(
+												`${CustomIds.TurnPagePrefix}${
+													currentCategoryIndex - 1
+												}`,
+											)
+											.setDisabled(currentCategoryIndex === 0)
+											.setLabel('◂')
+											.setStyle(ButtonStyle.Primary),
+										new ButtonBuilder()
+											.setCustomId(
+												`${CustomIds.TurnPagePrefix}${
+													currentCategoryIndex + 1
+												}`,
+											)
+											.setDisabled(
+												currentCategoryIndex === nonEmptyCategories.length - 1,
+											)
+											.setLabel('▸')
+											.setStyle(ButtonStyle.Primary),
+									),
+								],
+								embeds: [
+									new EmbedBuilder()
+										.setTitle('Role Selection')
+										.setColor('White')
+										.setDescription(
+											nonEmptyCategories
+												.map(
+													(v, i) =>
+														`${
+															i === currentCategoryIndex ? '**' : ''
+														}${i}. ${v}${
+															i === currentCategoryIndex ? '**' : ''
+														}`,
+												)
+												.join(' > '),
+										),
+								],
+							})
+						}
+
+						async function sendTimeoutReply() {
+							return interaction.editReply({
+								components: [],
+								embeds: [
+									new EmbedBuilder()
+										.setColor('Red')
+										.setDescription(':x: Interaction timed out.'),
+								],
+							})
+						}
+
+						async function awaitInteraction(category: string) {
+							return await reply.awaitMessageComponent({
+								filter: (i) => {
+									i.deferUpdate()
+									return (
+										i.user.id === interaction.user.id &&
+										((i.isSelectMenu() &&
+											i.customId ===
+												`${CustomIds.SelectRolesPrefix}${category}`) ||
+											(i.isButton() &&
+												i.customId.startsWith(`${CustomIds.TurnPagePrefix}`)))
+									)
+								},
+								time: InteractionTimeoutMs,
+							})
+						}
+
+						async function updateRoles(category: string, roleIds: string[]) {
+							const member = await guild.members.fetch(interaction.user.id)
+							const roles = member.roles
+							const goodIds = roleIds.filter((id) => !roles.cache.has(id))
+							const badIds = [...roles.cache.keys()].filter(
+								(id) =>
+									store.roles[category]!.includes(id) && !roleIds.includes(id),
+							)
+
+							const newMember = badIds.length
+								? await roles.remove(badIds, `Remove ${badIds.join(', ')}`)
+								: member
+
+							if (goodIds.length) {
+								await newMember.roles.add(goodIds, `Add ${goodIds.join(', ')}`)
+							}
+						}
+					}
+				})
+			},
+		},
+	}
+
+	// register commands.
+	await client.rest.put(
 		Routes.applicationGuildCommands(clientId, config.guild),
 		{
-			body: [kissCommand, pickTheBestCommand],
+			body: Object.values(Registrations).map((c) => c.command),
 		},
 	)
-}
 
-function getInteractionCreateHandler(): (
-	// config: QudahConfig,
-	// storePtr: [Readonly<Store>],
-	// webhook: Webhook,
-	// guild: Guild,
-	...args: ClientEvents['interactionCreate']
-) => Awaitable<void> {
-	return async (interaction) => {
+	// register command handlers.
+	client.on('interactionCreate', async (interaction) => {
 		if (!interaction.isChatInputCommand()) {
 			return
 		}
 
+		const name = interaction.commandName
 		try {
-			switch (interaction.commandName) {
-				case 'kiss':
-					await interaction.reply({
-						content: `mwah in ${client.ws.ping} ms :kissing_heart:`,
-					})
-					break
-				case 'pick-the-best': {
-					const options = new Array(5)
-						.fill(undefined)
-						.map((_, i) => interaction.options.getString(`option${i}`))
-						.filter((v: string | null): v is string => !!v)
-					await interaction.reply({
-						content: `${options
-							.map((option) => `use ${option} if ${option} works the best for you`)
-							.join('; ')}. it really is that simple, you fucking idiot.`,
-					})
-					break
-				}
-				default:
-					break
-			}
+			await Registrations[name]?.handler?.(interaction)
 		} catch (e) {
-			console.error('[interactionCreateHandler]', e)
+			console.error(`[slash command interaction handler] [${name}]`, e)
 		}
+	})
+
+	// execute optional initiations.
+	for (const { init } of Object.values(Registrations)) {
+		init?.()
 	}
+}
+
+function newArray<T>(size: number, filler: (i: number) => T): T[] {
+	return new Array(size).fill(undefined).map((_, i) => filler(i))
 }

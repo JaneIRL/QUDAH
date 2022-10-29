@@ -24,9 +24,13 @@ export async function loadJsonFile<T>(
 }
 
 export async function saveJsonFile(path: string, data: unknown): Promise<void> {
-	const url = new URL(path, import.meta.url)
-	console.info(`[saveJsonFile] saving '${url}' (path = '${path}')`)
-	return fsp.writeFile(url, JSON.stringify(data), 'utf8')
+	try {
+		const url = new URL(path, import.meta.url)
+		console.info(`[saveJsonFile] saving '${url}' (path = '${path}')`)
+		return fsp.writeFile(url, JSON.stringify(data), 'utf8')
+	} catch (e) {
+		console.error(`ERROR [saveJsonFile] saving (path = '${path}')`, e)
+	}
 }
 
 export function stringifyNumber(value: number, radix: number): string {
@@ -36,7 +40,7 @@ export function stringifyNumber(value: number, radix: number): string {
 
 	const presentation = rawRepresentation
 		.split('')
-		.map(c => c.toUpperCase())
+		.map((c) => c.toUpperCase())
 		.map((c, i) =>
 			// insert a space every 4 digits, excluding the first one.
 			i !== 0 &&
