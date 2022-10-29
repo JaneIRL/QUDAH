@@ -723,9 +723,6 @@ async function registerCommands(
 													currentCategoryIndex + 1
 												}`,
 											)
-											.setDisabled(
-												currentCategoryIndex === nonEmptyCategories.length - 1,
-											)
 											.setLabel('▸')
 											.setStyle(ButtonStyle.Primary),
 									),
