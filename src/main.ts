@@ -32,6 +32,8 @@ const SelectMenuMaxOptions = 25
 const MaxCategories = 10
 const SaveStoreIntervalMs = 3600_000
 const InteractionTimeoutMs = 120_000
+// 8 hours
+const CountItMyselfDelayMs = 30 * 1000
 
 const client = new Client({
 	intents: ['Guilds', 'GuildMessages', 'GuildWebhooks', 'MessageContent'],
@@ -70,6 +72,8 @@ try {
 	await registerCommands(client, config, guild, store)
 
 	setInterval(() => saveStore(store), SaveStoreIntervalMs)
+
+	countItMyself(config, store, webhook)
 
 	readline
 		.createInterface({
@@ -147,16 +151,16 @@ function getMessageCreateHandler(
 			const member = await guild.members.fetch(message.author.id)
 
 			// resend user message as a webhook message for formatting
-			await webhook.send({
-				content: `\`${stringifyNumber(parsedMessage.value, config.radix)}\`${
-					parsedMessage.note
-						? // pipes in the note are removed by parseUserMessage so it is safe to pass it here directly.
-						  ` ||${parsedMessage.note}||`
-						: ''
-				}`,
-				username: member.displayName,
+			await sendCountingMessage({
 				avatarURL: member.displayAvatarURL(),
+				config,
+				note: parsedMessage.note,
+				username: member.displayName,
+				value: parsedMessage.value,
+				webhook,
 			})
+
+			store.previous_timestamp = new Date().getTime()
 
 			// check if the user submitted value is correct
 			if (
@@ -222,6 +226,30 @@ function getMessageCreateHandler(
 	}
 }
 
+async function sendCountingMessage({
+	avatarURL,
+	config,
+	note,
+	username,
+	value,
+	webhook,
+}: {
+	avatarURL?: string | undefined
+	config: QudahConfig
+	note?: string | undefined
+	username?: string | undefined
+	value: number
+	webhook: Webhook
+}) {
+	await webhook.send({
+		content: `\`${stringifyNumber(value, config.radix)}\`${
+			note ? ` ${note}` : ''
+		}`,
+		username,
+		avatarURL,
+	})
+}
+
 interface UserMessage {
 	representation: string
 	note: string
@@ -245,7 +273,7 @@ function parseUserMessage(
 	if (radix > 10) {
 		DigitSet.add('x')
 	}
-	const DeniedPattern = /^[|\u200f]$/iu
+	const DeniedPattern = /^[\u200f]$/iu
 	const WhitespacePattern = /^[ \t\n\r]$/iu
 
 	const ans: UserMessage = {
@@ -829,6 +857,37 @@ async function registerCommands(
 	for (const { init } of Object.values(Registrations)) {
 		init?.()
 	}
+}
+
+async function countItMyself(
+	config: QudahConfig,
+	store: Store,
+	webhook: Webhook,
+) {
+	const currentTime = new Date().getTime()
+	if (
+		store.previous_timestamp !== undefined &&
+		store.previous_value !== undefined &&
+		currentTime - store.previous_timestamp >= CountItMyselfDelayMs
+	) {
+		await sendCountingMessage({
+			avatarURL: client.user?.displayAvatarURL(),
+			config,
+			note: 'counting myself',
+			username: client.user?.username,
+			value: store.previous_value + 1,
+			webhook,
+		})
+		store.previous_timestamp = currentTime
+		store.previous_user = client.user?.id ?? webhook.id
+		store.previous_value += 1
+	}
+
+	const nextDelayMs = Math.random() * 2 * CountItMyselfDelayMs
+	setTimeout(countItMyself.bind(undefined, config, store, webhook), nextDelayMs)
+	console.info(
+		`[countItMyself] checked at ${currentTime}. next check scheduled in ${nextDelayMs} ms.`,
+	)
 }
 
 function newArray<T>(size: number, filler: (i: number) => T): T[] {

@@ -4,8 +4,9 @@ import { isErrnoException, loadJsonFile, saveJsonFile } from './util.js'
 const Path = process.env['STORE_PATH'] ?? './store.json'
 
 export interface Store {
-	previous_value?: number
+	previous_timestamp?: number
 	previous_user?: Snowflake
+	previous_value?: number
 	roles: Record<string, Snowflake[]>
 	webhook?: Snowflake
 }
