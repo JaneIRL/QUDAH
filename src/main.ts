@@ -33,7 +33,7 @@ const MaxCategories = 10
 const SaveStoreIntervalMs = 3600_000
 const InteractionTimeoutMs = 120_000
 // 8 hours
-const CountItMyselfDelayMs = 30 * 1000
+const CountItMyselfDelayMs = 8 * 60 * 60 * 1000
 
 const client = new Client({
 	intents: ['Guilds', 'GuildMessages', 'GuildWebhooks', 'MessageContent'],
