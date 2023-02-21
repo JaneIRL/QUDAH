@@ -16,6 +16,7 @@ import {
 	SelectMenuBuilder,
 	SelectMenuOptionBuilder,
 	SlashCommandBuilder,
+	SlashCommandIntegerOption,
 	SlashCommandRoleOption,
 	SlashCommandStringOption,
 	SlashCommandSubcommandBuilder,
@@ -32,8 +33,9 @@ const SelectMenuMaxOptions = 25
 const MaxCategories = 10
 const SaveStoreIntervalMs = 3600_000
 const InteractionTimeoutMs = 120_000
-// 8 hours
-const CountItMyselfDelayMs = 8 * 60 * 60 * 1000
+const CountItMyselfMinIntervalMs = 1000
+// 1 hour
+const CountItMyselfBiasMs = 1 * 60 * 60 * 1000
 
 const client = new Client({
 	intents: ['Guilds', 'GuildMessages', 'GuildWebhooks', 'MessageContent'],
@@ -150,11 +152,15 @@ function getMessageCreateHandler(
 
 			const member = await guild.members.fetch(message.author.id)
 
+			const isCorrect =
+				previousValue === undefined || parsedMessage.value === previousValue + 1
+
 			// resend user message as a webhook message for formatting
 			await sendCountingMessage({
 				avatarURL: member.displayAvatarURL(),
 				config,
 				note: parsedMessage.note,
+				strikethrough: !isCorrect,
 				username: member.displayName,
 				value: parsedMessage.value,
 				webhook,
@@ -162,23 +168,11 @@ function getMessageCreateHandler(
 
 			store.previous_timestamp = new Date().getTime()
 
-			// check if the user submitted value is correct
-			if (
-				previousValue === undefined ||
-				parsedMessage.value === previousValue + 1
-			) {
+			if (isCorrect) {
 				store.previous_user = message.author.id
 				store.previous_value = parsedMessage.value
 			} else {
-				if (config.resume_on_error) {
-					await message.channel.send({
-						content: `<@${message.author.id}> no, \`${stringifyNumber(
-							parsedMessage.value,
-							config.radix,
-						)}\` is not it.`,
-						allowedMentions: { parse: ['users'] },
-					})
-				} else {
+				if (!config.resume_on_error) {
 					await webhook.send({
 						embeds: [
 							new EmbedBuilder()
@@ -226,10 +220,28 @@ function getMessageCreateHandler(
 	}
 }
 
+function formatCountingMessage({
+	config,
+	note,
+	strikethrough,
+	value,
+}: {
+	config: QudahConfig
+	note?: string | undefined
+	strikethrough?: boolean
+	value: number
+}) {
+	return `${strikethrough ? '~~' : ''}\`${stringifyNumber(
+		value,
+		config.radix,
+	)}\`${strikethrough ? '~~' : ''}${note ? ` ${note}` : ''}`
+}
+
 async function sendCountingMessage({
 	avatarURL,
 	config,
 	note,
+	strikethrough,
 	username,
 	value,
 	webhook,
@@ -237,14 +249,13 @@ async function sendCountingMessage({
 	avatarURL?: string | undefined
 	config: QudahConfig
 	note?: string | undefined
+	strikethrough?: boolean
 	username?: string | undefined
 	value: number
 	webhook: Webhook
 }) {
 	await webhook.send({
-		content: `\`${stringifyNumber(value, config.radix)}\`${
-			note ? ` ${note}` : ''
-		}`,
+		content: formatCountingMessage({ config, note, strikethrough, value }),
 		username,
 		avatarURL,
 	})
@@ -334,6 +345,8 @@ function parseUserMessage(
 		}
 	}
 
+	ans.note = ans.note.trim()
+
 	ans.value = parseInt(ans.representation, radix)
 
 	if (isNaN(ans.value)) {
@@ -367,62 +380,14 @@ async function registerCommands(
 	})
 
 	const Registrations: Record<string, Registration> = {
-		kiss: {
+		ping: {
 			command: new SlashCommandBuilder()
-				.setName('kiss')
-				.setDescription('Kiss QUDAH')
+				.setName('ping')
+				.setDescription('ping QUDAH')
 				.toJSON(),
 			handler: async (interaction) => {
 				await interaction.reply({
 					content: `Mwah in ${client.ws.ping} ms :kissing_heart:`,
-					fetchReply: false,
-				})
-			},
-		},
-		'pick-the-best': {
-			command: new SlashCommandBuilder()
-				.setName('pick-the-best')
-				.setDescription(
-					"Ask for QUDAH's opinion on which one is the best option",
-				)
-				.addStringOption(
-					new SlashCommandStringOption()
-						.setName('option0')
-						.setDescription('Option 0')
-						.setRequired(true),
-				)
-				.addStringOption(
-					new SlashCommandStringOption()
-						.setName('option1')
-						.setDescription('Option 1')
-						.setRequired(true),
-				)
-				.addStringOption(
-					new SlashCommandStringOption()
-						.setName('option2')
-						.setDescription('Option 2'),
-				)
-				.addStringOption(
-					new SlashCommandStringOption()
-						.setName('option3')
-						.setDescription('Option 3'),
-				)
-				.addStringOption(
-					new SlashCommandStringOption()
-						.setName('option4')
-						.setDescription('Option 4'),
-				)
-				.toJSON(),
-			handler: async (interaction) => {
-				const options = newArray(5, (i) =>
-					interaction.options.getString(`option${i}`),
-				).filter((v: string | null): v is string => !!v)
-				await interaction.reply({
-					content: `${options
-						.map(
-							(option) => `Use ${option} if ${option} works the best for you`,
-						)
-						.join('. ')}. It really is that simple, you fucking idiot.`,
 					fetchReply: false,
 				})
 			},
@@ -432,6 +397,27 @@ async function registerCommands(
 				.setName('sudo')
 				.setDescription('For those close to QUDAH')
 				.setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+				.addSubcommandGroup(
+					new SlashCommandSubcommandGroupBuilder()
+						.setName('counting')
+						.setDescription('Counting related commands')
+						.addSubcommand(
+							new SlashCommandSubcommandBuilder()
+								.setName('get')
+								.setDescription('Get the previous value'),
+						)
+						.addSubcommand(
+							new SlashCommandSubcommandBuilder()
+								.setName('reset')
+								.setDescription('Reset the previous value')
+								.addIntegerOption(
+									new SlashCommandIntegerOption()
+										.setName('value')
+										.setDescription('The value to set to')
+										.setRequired(false),
+								),
+						),
+				)
 				.addSubcommandGroup(
 					new SlashCommandSubcommandGroupBuilder()
 						.setName('role')
@@ -504,7 +490,92 @@ async function registerCommands(
 			handler: async (interaction) => {
 				const subcommandGroup = interaction.options.getSubcommandGroup(true)
 				const subcommand = interaction.options.getSubcommand(true)
-				if (subcommandGroup === 'role') {
+				if (subcommandGroup === 'counting') {
+					if (subcommand === 'get') {
+						await interaction.reply({
+							content: `\`${store.previous_value}\`; ${formatCountingMessage({
+								config,
+								value: store.previous_value ?? 0,
+							})}.`,
+							ephemeral: true,
+						})
+					} else if (subcommand === 'reset') {
+						const value = interaction.options.getInteger('value') ?? 0
+						await interaction.reply({
+							content: `${formatCountingMessage({ config, value })}`,
+						})
+					} else if (subcommand === 'register-category') {
+						const category = interaction.options.getString('category', true)
+						if (!category.match(/^[a-zA-Z0-9]{1,32}$/)) {
+							await interaction.reply({
+								content: `:x: Category names can only contain 1-32 alphanumeric characters.`,
+							})
+						} else if (Object.keys(store.roles).length >= MaxCategories) {
+							await interaction.reply({
+								content: `:x: At most ${MaxCategories} categories can be registered.`,
+							})
+						} else if (store.roles[category]) {
+							await interaction.reply({
+								content: `:x: The category '${category}' already exists.`,
+							})
+						} else {
+							store.roles[category] = []
+							await interaction.reply({
+								content: `:white_check_mark: The category '${category}' has been registered.`,
+							})
+						}
+					} else if (subcommand === 'register-role') {
+						const category = interaction.options.getString('category', true)
+						const role = interaction.options.getRole('role', true)
+						const storeRoles = store.roles[category]
+						if (!storeRoles) {
+							await interaction.reply({
+								content: `:x: Unknown category '${category}'.`,
+							})
+						} else if (storeRoles.length >= SelectMenuMaxOptions * 4) {
+							await interaction.reply({
+								content: `:x: No more than ${
+									SelectMenuMaxOptions * 4
+								} roles can be registered under a single category.`,
+							})
+						} else if (storeRoles.includes(role.id)) {
+							await interaction.reply({
+								content: `:x: The role '${role.name}' has already been registered under the category '${category}'.`,
+							})
+						} else {
+							storeRoles.push(role.id)
+							await interaction.reply({
+								content: `:white_check_mark: The role '${role.name}' has been registered under the category '${category}'.`,
+							})
+						}
+					} else if (subcommand === 'send-prompt') {
+						const channel = interaction.channel
+						if (!channel) {
+							return
+						}
+
+						const content = interaction.options.getString('content', true)
+						await channel.send({
+							allowedMentions: {},
+							components: [
+								new ActionRowBuilder<ButtonBuilder>().addComponents(
+									new ButtonBuilder()
+										.setCustomId(CustomIds.SelectRoles)
+										.setLabel('Select Roles')
+										.setStyle(ButtonStyle.Primary),
+								),
+							],
+							embeds: [
+								new EmbedBuilder().setColor('White').setDescription(content),
+							],
+						})
+						await interaction.reply({
+							content: 'sent',
+							ephemeral: true,
+							fetchReply: false,
+						})
+					}
+				} else if (subcommandGroup === 'role') {
 					if (subcommand === 'list-categories') {
 						await interaction.reply({
 							content: `Existing categories: ${Object.keys(store.roles).join(
@@ -868,12 +939,11 @@ async function countItMyself(
 	if (
 		store.previous_timestamp !== undefined &&
 		store.previous_value !== undefined &&
-		currentTime - store.previous_timestamp >= CountItMyselfDelayMs
+		currentTime - store.previous_timestamp >= CountItMyselfMinIntervalMs
 	) {
 		await sendCountingMessage({
 			avatarURL: client.user?.displayAvatarURL(),
 			config,
-			note: 'counting myself',
 			username: client.user?.username,
 			value: store.previous_value + 1,
 			webhook,
@@ -883,7 +953,7 @@ async function countItMyself(
 		store.previous_value += 1
 	}
 
-	const nextDelayMs = Math.random() * 2 * CountItMyselfDelayMs
+	const nextDelayMs = Math.random() * 3 * CountItMyselfBiasMs
 	setTimeout(countItMyself.bind(undefined, config, store, webhook), nextDelayMs)
 	console.info(
 		`[countItMyself] checked at ${currentTime}. next check scheduled in ${nextDelayMs} ms.`,
