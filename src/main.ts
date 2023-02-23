@@ -415,6 +415,12 @@ async function registerCommands(
 										.setName('value')
 										.setDescription('The value to set to')
 										.setRequired(false),
+								)
+								.addStringOption(
+									new SlashCommandStringOption()
+										.setName('note')
+										.setDescription('The note')
+										.setRequired(false),
 								),
 						),
 				)
@@ -501,8 +507,11 @@ async function registerCommands(
 						})
 					} else if (subcommand === 'reset') {
 						const value = interaction.options.getInteger('value') ?? 0
+						const note = interaction.options.getString('note') ?? undefined
+						store.previous_user = client.user?.id ?? interaction.id
+						store.previous_value = value
 						await interaction.reply({
-							content: `${formatCountingMessage({ config, value })}`,
+							content: `${formatCountingMessage({ config, note, value })}`,
 						})
 					} else if (subcommand === 'register-category') {
 						const category = interaction.options.getString('category', true)
