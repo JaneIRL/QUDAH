@@ -412,8 +412,14 @@ async function registerCommands(
 								.setDescription('Reset the previous value')
 								.addIntegerOption(
 									new SlashCommandIntegerOption()
-										.setName('value')
-										.setDescription('The value to set to')
+										.setName('decimal')
+										.setDescription('The decimal value to set to')
+										.setRequired(false),
+								)
+								.addStringOption(
+									new SlashCommandStringOption()
+										.setName('formatted')
+										.setDescription('The value under specific radix to set to')
 										.setRequired(false),
 								)
 								.addStringOption(
@@ -506,7 +512,9 @@ async function registerCommands(
 							ephemeral: true,
 						})
 					} else if (subcommand === 'reset') {
-						const value = interaction.options.getInteger('value') ?? 0
+						const formatted = interaction.options.getString('formatted')?.replaceAll(' ', '') ?? '0'
+						const decimal = interaction.options.getInteger('decimal')
+						const value = decimal ?? parseInt(formatted, config.radix)
 						const note = interaction.options.getString('note') ?? undefined
 						store.previous_user = client.user?.id ?? interaction.id
 						store.previous_value = value
