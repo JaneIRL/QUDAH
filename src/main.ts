@@ -10,6 +10,7 @@ import {
 	EmbedBuilder,
 	Guild,
 	Message,
+	MessageType,
 	PermissionFlagsBits,
 	RESTPostAPIApplicationCommandsJSONBody,
 	Routes,
@@ -75,7 +76,7 @@ try {
 
 	setInterval(() => saveStore(store), SaveStoreIntervalMs)
 
-	countItMyself(config, store, webhook)
+	scheduleSelfCounting(config, store, webhook)
 
 	readline
 		.createInterface({
@@ -119,7 +120,8 @@ function getMessageCreateHandler(
 		if (
 			message.channelId !== config.channel ||
 			message.author.bot ||
-			message.author.system
+			message.author.system ||
+			message.type === MessageType.ChannelPinnedMessage
 		) {
 			return
 		}
@@ -196,6 +198,20 @@ function getMessageCreateHandler(
 				if (!config.resume_on_error) {
 					store.previous_value = -1
 				}
+			}
+
+			if (
+				parsedMessage.note.match(/happy/i) &&
+				parsedMessage.note.match(/\b143\b/) &&
+				new Date()
+					.toLocaleTimeString(undefined, {
+						hourCycle: 'h12',
+						timeStyle: 'short',
+						timeZone: config.timezone,
+					})
+					.startsWith('1:43')
+			) {
+				await selfCount(config, store, webhook, undefined, 'HAPPY 143')
 			}
 		} catch (e) {
 			console.error('[messageCreateHandler]', e)
@@ -512,7 +528,9 @@ async function registerCommands(
 							ephemeral: true,
 						})
 					} else if (subcommand === 'reset') {
-						const formatted = interaction.options.getString('formatted')?.replaceAll(' ', '') ?? '0'
+						const formatted =
+							interaction.options.getString('formatted')?.replaceAll(' ', '') ??
+							'0'
 						const decimal = interaction.options.getInteger('decimal')
 						const value = decimal ?? parseInt(formatted, config.radix)
 						const note = interaction.options.getString('note') ?? undefined
@@ -947,7 +965,7 @@ async function registerCommands(
 	}
 }
 
-async function countItMyself(
+async function scheduleSelfCounting(
 	config: QudahConfig,
 	store: Store,
 	webhook: Webhook,
@@ -955,13 +973,37 @@ async function countItMyself(
 	const currentTime = new Date().getTime()
 	if (
 		store.previous_timestamp !== undefined &&
-		store.previous_value !== undefined &&
-		(store.previous_user !== client.user?.id ?? webhook.id) &&
 		currentTime - store.previous_timestamp >= CountItMyselfMinIntervalMs
+	) {
+		await selfCount(config, store, webhook, currentTime)
+	}
+
+	const nextDelayMs = Math.random() * 3 * CountItMyselfBiasMs
+	setTimeout(
+		scheduleSelfCounting.bind(undefined, config, store, webhook),
+		nextDelayMs,
+	)
+	console.info(
+		`[scheduleSelfCounting] checked at ${currentTime}. next check scheduled in ${nextDelayMs} ms.`,
+	)
+}
+
+async function selfCount(
+	config: QudahConfig,
+	store: Store,
+	webhook: Webhook,
+	currentTime = new Date().getTime(),
+	note?: string,
+) {
+	if (
+		store.previous_timestamp !== undefined &&
+		store.previous_value !== undefined &&
+		(store.previous_user !== client.user?.id ?? webhook.id)
 	) {
 		await sendCountingMessage({
 			avatarURL: client.user?.displayAvatarURL(),
 			config,
+			note,
 			username: client.user?.username,
 			value: store.previous_value + 1,
 			webhook,
@@ -970,12 +1012,6 @@ async function countItMyself(
 		store.previous_user = client.user?.id ?? webhook.id
 		store.previous_value += 1
 	}
-
-	const nextDelayMs = Math.random() * 3 * CountItMyselfBiasMs
-	setTimeout(countItMyself.bind(undefined, config, store, webhook), nextDelayMs)
-	console.info(
-		`[countItMyself] checked at ${currentTime}. next check scheduled in ${nextDelayMs} ms.`,
-	)
 }
 
 function newArray<T>(size: number, filler: (i: number) => T): T[] {
