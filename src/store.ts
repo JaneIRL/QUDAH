@@ -27,7 +27,7 @@ export async function loadStore(): Promise<Store> {
 	} catch (e) {
 		if (isErrnoException(e) && e.code === 'ENOENT') {
 			// store file doesn't exist yet, we will return the fallback value.
-			return FallbackStore
+			return JSON.parse(JSON.stringify(FallbackStore))
 		} else {
 			// rethrow other errors.
 			throw e
