@@ -956,6 +956,7 @@ async function countItMyself(
 	if (
 		store.previous_timestamp !== undefined &&
 		store.previous_value !== undefined &&
+		(store.previous_user !== client.user?.id ?? webhook.id) &&
 		currentTime - store.previous_timestamp >= CountItMyselfMinIntervalMs
 	) {
 		await sendCountingMessage({
