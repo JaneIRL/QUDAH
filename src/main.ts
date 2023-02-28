@@ -202,7 +202,7 @@ function getMessageCreateHandler(
 
 			if (
 				parsedMessage.note.match(/happy/i) &&
-				parsedMessage.note.match(/\b143\b/) &&
+				parsedMessage.note.match(/(?:\D|\b)143(?:\D|\b)/) &&
 				new Date()
 					.toLocaleTimeString(undefined, {
 						hourCycle: 'h12',
