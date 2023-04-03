@@ -14,8 +14,8 @@ import {
 	PermissionFlagsBits,
 	RESTPostAPIApplicationCommandsJSONBody,
 	Routes,
-	SelectMenuBuilder,
-	SelectMenuOptionBuilder,
+	StringSelectMenuBuilder,
+	StringSelectMenuOptionBuilder,
 	SlashCommandBuilder,
 	SlashCommandIntegerOption,
 	SlashCommandRoleOption,
@@ -769,7 +769,7 @@ async function registerCommands(
 							try {
 								const subInteraction = await awaitInteraction(category)
 								try {
-									if (subInteraction.isSelectMenu()) {
+									if (subInteraction.isStringSelectMenu()) {
 										await updateRoles(category, subInteraction.values)
 										await showMenu(interaction, currentCategoryIndex + 1, reply)
 									} else {
@@ -826,8 +826,8 @@ async function registerCommands(
 						) {
 							await interaction.editReply({
 								components: [
-									new ActionRowBuilder<SelectMenuBuilder>().addComponents(
-										new SelectMenuBuilder()
+									new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+										new StringSelectMenuBuilder()
 											.setCustomId(`${CustomIds.SelectRolesPrefix}${category}`)
 											.setMinValues(0)
 											.setMaxValues(roleOptions.length)
@@ -839,7 +839,7 @@ async function registerCommands(
 															: 1,
 													)
 													.map(({ id, label, selected }) =>
-														new SelectMenuOptionBuilder()
+														new StringSelectMenuOptionBuilder()
 															.setLabel(label)
 															.setValue(id)
 															.setDefault(selected),
