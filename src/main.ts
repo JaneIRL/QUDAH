@@ -14,8 +14,8 @@ import {
 	PermissionFlagsBits,
 	RESTPostAPIApplicationCommandsJSONBody,
 	Routes,
-	StringSelectMenuBuilder,
-	StringSelectMenuOptionBuilder,
+	SelectMenuBuilder,
+	SelectMenuOptionBuilder,
 	SlashCommandBuilder,
 	SlashCommandIntegerOption,
 	SlashCommandRoleOption,
@@ -119,7 +119,7 @@ function getMessageCreateHandler(
 	return async (message) => {
 		if (
 			message.channelId !== config.channel ||
-			message.author.bot ||
+			(message.author.bot && message.author.id !== '1114799558984216579') ||
 			message.author.system ||
 			message.type === MessageType.ChannelPinnedMessage
 		) {
@@ -769,7 +769,7 @@ async function registerCommands(
 							try {
 								const subInteraction = await awaitInteraction(category)
 								try {
-									if (subInteraction.isStringSelectMenu()) {
+									if (subInteraction.isSelectMenu()) {
 										await updateRoles(category, subInteraction.values)
 										await showMenu(interaction, currentCategoryIndex + 1, reply)
 									} else {
@@ -826,8 +826,8 @@ async function registerCommands(
 						) {
 							await interaction.editReply({
 								components: [
-									new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
-										new StringSelectMenuBuilder()
+									new ActionRowBuilder<SelectMenuBuilder>().addComponents(
+										new SelectMenuBuilder()
 											.setCustomId(`${CustomIds.SelectRolesPrefix}${category}`)
 											.setMinValues(0)
 											.setMaxValues(roleOptions.length)
@@ -839,7 +839,7 @@ async function registerCommands(
 															: 1,
 													)
 													.map(({ id, label, selected }) =>
-														new StringSelectMenuOptionBuilder()
+														new SelectMenuOptionBuilder()
 															.setLabel(label)
 															.setValue(id)
 															.setDefault(selected),
